@@ -1,0 +1,524 @@
+---
+title: "Dimension Reduction on Flow Cytometry Data"
+author: "Yamkela Kwakwi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Visualization of flow cytometry data
+
+In this part of the assignment we will use three dimension reduction techniques to visualize data in high dimension.
+
+## Data Exploratory
+
+```{r, warning=FALSE, message=FALSE}
+# Export libraries and read data
+
+library(ggplot2)
+library(tibble)
+library(knitr)
+library(dplyr)
+
+dat <- read.csv("data/flow_cytometry_data.csv")
+dat <- as.tibble(dat)
+dat
+
+```
+
+```{r}
+# Check how many major cell types we have
+unique(dat$major)
+```
+
+```{r}
+# Check how many minor cell types we have
+unique(dat$minor)
+```
+
+The dataset is a 100 000 simulated cells. Each cell is classified into one of six cell groups: b, cd4, cd8, mait, nk, or tcrgd. Each group is further divided into subtypes such as memory, naive, plasma, centralmemory, effectormemory, th1, th2, cytotoxic, cd4+, cd8+, cd56+cd16-, cd56bright, cd56dim, vdelta1, and vgamma9vdelta2. The dataset contains expression levels of 17 different markers for these cells.
+
+### Major and Minor cell count
+
+```{r}
+# Calculate the percatge abundance of each major_minor cell type
+
+cell_count <- dat %>% 
+  group_by(major, minor) %>% 
+  summarise(count = n()) %>% 
+  mutate(major_minor = paste(major,minor, sep = "_"), 
+         percentage = (count/100000)*100) %>% 
+  mutate(percentage = round(percentage,2))   #round percantage to 2 decimals
+cell_count <- cell_count[,-3]  # exclude the count variable 
+
+DT::datatable(cell_count)
+
+```
+
+```{r}
+# Check how many major_minor cell types we have
+unique(cell_count$major_minor)
+```
+
+There is a total of 19 different major_minor types in the dataset. b cells have 3 subtypes, cd4 cells have 5 subtypes, cd8 cells have 4 subtypes, mait cells have 2 subtypes, nk cells have 2 subtypes and tcrgd cells have 2 subtypes.
+
+In terms of abundance, cd4 effectormemory cells, cd4 naive cells and cd8 effectormemory cells are the most common, while nk cd56+cd16 cells, tcrgd vdelta1 cells and mait cd4+ cells are the least common.
+
+```{r}
+# Add the major_minor variable to the dat
+dat <- dat %>% 
+  mutate(major_minor = paste(major,minor, sep = "_"))
+
+# Subset the dat to 1k observations for test runs
+dat_subset <- dat %>% sample_n(10000)
+```
+
+## Data prep
+
+### For applying dimension reduction techinique
+
+```{r}
+# Convert to matrix excluding 'major' and 'minor' columns
+mat_dat <- as.matrix(dat %>% select(-major, -minor, -major_minor))
+
+# Select the categorical data
+cat_dat <- dat %>% select(major_minor,major,minor)
+
+```
+
+### For plotting
+
+```{r}
+library(cowplot)
+library(ggrepel)
+library(RColorBrewer)
+
+col_vec_bcell <- c("#c5e1a5", "#aed581", "#9ccc65")  
+
+col_vec_cd4 <- c("#b3d1ff", "#a3c1da", "#87bdd8", "#6fa3c1", "#00509e") 
+
+col_vec_cd8 <- c("#ffcccb", "#ffb3ba", "#ff9999", "#ff8080")  
+
+col_vec_mait <- c("#dab3ff", "#c299ff") 
+
+col_vec_nk <- c("#ffe4b3", "#ffd699", "#ffc266") 
+
+col_vec_tcrgd <- c("#d3d3d3", "#696969")  
+
+
+
+display_tbl <- cell_count %>% 
+  mutate(n_all = n()) %>% 
+  group_by(major) %>% 
+  mutate(n_major = n()) %>% 
+  ungroup() %>% 
+  select(major_minor, major, minor, n_all, n_major) %>% 
+  group_by(major_minor, major, minor) %>% 
+  summarise(
+    perc_all = (n()/n_all[1]*100) %>% signif(2),
+    perc_major = (n()/n_major[1]*100) %>%  signif(2),
+    .groups = "drop"
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    col_minor = c(col_vec_bcell, col_vec_cd4, col_vec_cd8, col_vec_mait, col_vec_nk, col_vec_tcrgd),
+    col_major = c(
+      rep(col_vec_bcell[2],3),
+      rep(col_vec_cd4[3],5),
+      rep(col_vec_cd8[2],4),
+      rep(col_vec_mait[2],2),
+      rep(col_vec_nk[2],3),
+      rep(col_vec_tcrgd[2],2)
+    )
+  ) %>% 
+  
+  mutate(
+    shape_minor = c(15:17, c(15:18,25), c(15:18), c(15:16), c(15:17), c(15:16)),
+    shape_major = c(
+      rep(15,3),
+      rep(16,5),
+      rep(17,4),
+      rep(18,2),
+      rep(25,3),
+      rep(10,2)
+      
+    )
+  ) %>% 
+  select(major_minor, major, minor, col_major, col_minor, shape_major, shape_minor, perc_all, perc_major)
+
+col_lab_minor <- display_tbl$col_major %>% 
+  stats::setNames(display_tbl$major_minor)
+shape_lab_minor <- display_tbl$shape_minor %>% 
+  stats::setNames(display_tbl$major_minor)
+
+display_tbl_major <- display_tbl %>% 
+  group_by(major) %>% 
+  slice(1) %>% 
+  ungroup()
+
+col_lab_major <- display_tbl_major$col_major %>% 
+  stats::setNames(display_tbl_major$major)
+shape_lab_major <- display_tbl_major$shape_major %>% 
+  stats::setNames(display_tbl_major$major)
+```
+
+## PCA
+
+The first dimensionality reduction technique we used is Principal Component Analysis (PCA). PCA transforms the original data into a set of linearly uncorrelated variables called principal components.
+
+### Perform dimension reduction
+
+```{r}
+start_time <- Sys.time()
+pca <- prcomp(mat_dat, center = T, scale. = F) # apply PCA
+end_time <- Sys.time()
+
+# Calculate time it takes to run the PCA
+pca_tot_time <-  as.numeric(end_time - start_time)
+
+# Store the first two principal components
+pca_1 <- pca$x[, 1]
+pca_2 <- pca$x[, 2]
+
+# Calculate total variance explained by the 1st two prcomp
+var_explained <- summary(pca)$importance[2, 1:2] 
+var_explained
+total_var_explained <- sum(var_explained)
+total_var_explained
+
+# Total variance explained by the first two principal components
+total_variance_explained <- sum(var_explained)
+total_variance_explained
+
+# Ceate a tibble
+pca_tibble <- cat_dat %>%
+  mutate(pc1 = pca_1,      
+         pc2 = pca_2,      
+         pca_time = pca_tot_time) 
+
+pca_tibble <- as.tibble(pca_tibble)
+pca_tibble
+
+```
+
+The total runtime for performing dimensionality reduction using Principal Component Analysis (PCA) on this dataset was 5.449 seconds, which is quite fast, especially given the large size of the dataset: 100,000 observations and 17 features.\
+For the 2D plot, we will use the first two principal components. The explained variance by these two components is 45.036%, meaning that the first two principal components together account for 45.036% of the total variance in the data. This is a significant portion, but it also means that about 55% of the variance is not captured by these two components. For the plot we can expect a good representation of the main trends.
+
+### Plot both major and minor cell types and for each cell population
+
+```{r}
+# Plot for both major and minor cell types in one plot
+
+p1_pca <- ggplot(pca_tibble, aes(x = pc1, y = pc2))+
+  theme_cowplot()+
+  background_grid(major = "xy")+
+  geom_point(aes(colour = major_minor, shape = major), 
+             size = 2.5, alpha = 0.8) +
+  scale_color_manual(values = col_lab_minor)+
+  scale_shape_manual(values = shape_lab_major)+
+  geom_text_repel(
+    data = pca_tibble %>% 
+      group_by(major_minor, major, minor) %>% 
+      summarise(pca1_mean = mean(pc1),
+                pca2_mean = mean(pc2),
+                .groups = "drop"),
+    aes(x = pca1_mean, y = pca2_mean, label = major_minor),
+    size = 2.5, alpha = 0.8, inherit.aes = F, max.overlaps = 100) +
+  theme(legend.position = "botttom") +
+  labs(
+    title = "Flow Cytometry Data visualized using
+    PCA Technique",
+    x = "PCA 1",
+    y = "PCA 2",
+    color = "Cell type",
+    shape = "Major Cell Type") +
+  coord_equal()
+
+p1_pca
+
+ggsave("img/pca.jpg", plot = p1_pca, width = 10, height = 8)
+```
+
+```{r}
+# Facet for the different major cell types: "b"     "cd4"   "cd8"   "mait"  "nk"    "tcrgd"
+
+p2_pca <- ggplot(pca_tibble, aes(x=pc1, y = pc2))+
+  theme_cowplot()+
+  background_grid(major = "xy")+
+  geom_point(
+    aes(colour = major_minor, shape = major_minor),
+    size = 2.5, alpha = 0.8
+  )+
+  scale_color_manual(values = col_lab_minor)+
+  scale_shape_manual(values = shape_lab_minor)+  
+  geom_text_repel(
+    data = pca_tibble %>% 
+      group_by(major_minor, major) %>% 
+      summarise(pca1_mean = mean(pc1),
+                pca2_mean = mean(pc2),
+                .groups = "drop"),
+    aes(x = pca1_mean, y = pca2_mean, label = major_minor),
+    size = 2.5, alpha = 0.8, inherit.aes = FALSE, max.overlaps = 100)+
+  facet_wrap(~major, ncol = 3, scales = "free")+
+  labs(
+    title = "PCA of Flow Cytometry for each major cell population",
+    y = "PCA 1",
+    x = "PCA 2",
+    color = "Cell type",
+    shape = "Major Cell type"
+  )+
+  theme(legend.position = "none")
+
+
+p2_pca
+
+ggsave("img/pca_facet.jpg", plot = p2_pca, width = 10, height = 8)
+
+```
+
+The PCA algorithm performs well at separating the major cell types, such as b, cd4, cd8, mait, nk, and tcrgd, showing clear distinctions between them. However, there is significant overlap between the subtypes, making it challenging to differentiate between them in the 2D plot. Notably, the algorithm struggles with distinguishing subtypes, except for the mait cells. Specifically, mait cd8+ cells are clustered closer to the cd8 cell types, while mait cd4+ cells are pulled towards the cd4 cell types, indicating that these subtypes share similar principal components with the larger cell types they are associated with. This suggests that PCA may not be capture the finer, more complex relationships needed to separate these subtypes effectively.
+
+## MDS
+
+### Perform dimension reduction
+
+```{r}
+dat_subset <- dat %>% sample_n(10000) # for MDS we used a subset of 1000 observation because of scalability limitations
+
+# Convert to matrix excluding 'major' and 'minor' columns
+mat_subset <- as.matrix(dat_subset %>% select(-major, -minor, -major_minor))
+
+# Select the categorical data
+cat_subset <- dat_subset %>% select(major_minor,major,minor)
+
+
+distance_matrix <- dist(mat_subset)
+
+start_time <- Sys.time() 
+mds_result <- cmdscale(distance_matrix, k = 2)  
+end_time <- Sys.time()  
+
+# Calculate time it takes to run MDS
+mds_tot_time <- as.numeric(end_time - start_time)
+
+mds_1 <- mds_result[, 1]
+mds_2 <- mds_result[, 2]
+
+# Create a tibble with MDS results
+mds_tibble <- cat_subset %>%
+  mutate(mds1 = mds_1,
+         mds2 = mds_2,
+         mds_time = mds_tot_time)
+
+mds_tibble <- as.tibble(mds_tibble)
+mds_tibble
+
+
+```
+
+### Plot both major and minor cell types and for each cell type
+
+```{r}
+# Plot the MDS results
+p1_mds <- ggplot(mds_tibble, aes(x = mds1, y = mds2)) +
+  theme_cowplot()+
+  background_grid(major = "xy")+
+  geom_point(aes(color = major_minor, shape = major_minor), size = 3) +
+  scale_color_manual(values = col_lab_minor) +
+  scale_shape_manual(values = shape_lab_major)+  
+  geom_text_repel(
+    data = mds_tibble %>% 
+      group_by(major_minor, major, minor) %>% 
+      summarise(mds1_mean = mean(mds1),
+                mds2_mean = mean(mds2),
+                .groups = "drop"),
+    aes(x = mds1_mean, y = mds2_mean, label = major_minor),
+    size = 2.5, alpha = 0.8, inherit.aes = F, max.overlaps = 100) +
+  theme(legend.position = "botttom") +  
+  scale_shape_manual(values = shape_lab_minor) +
+  labs(
+    title = "Flow Cytometry Data Visualization using MDS",
+    x = "MDS 1",
+    y = "MDS 2",
+    color = "Cell type",
+    shape = "Major Cell type"
+  ) +
+  coord_equal()
+
+p1_mds
+
+ggsave("img/mds.jpg", plot = p1_mds, width = 10, height = 8)
+
+
+```
+
+```{r}
+# Faceted MDS plot based on the "major" cell types
+p2_mds <- ggplot(mds_tibble, aes(x = mds1, y = mds2)) +
+  theme_cowplot() +
+  background_grid(major = "xy") +
+  geom_point(
+    aes(colour = major_minor, shape = major_minor),
+    size = 2.5, alpha = 0.8
+  ) +
+  scale_color_manual(values = col_lab_minor) +
+  scale_shape_manual(values = shape_lab_minor) +
+  geom_text_repel(
+    data = mds_tibble %>%
+      group_by(major_minor, major) %>%
+      summarise(mds1_mean = mean(mds1),
+                mds2_mean = mean(mds2),
+                .groups = "drop"),
+    aes(x = mds1_mean, y = mds2_mean, label = major_minor),
+    size = 2.5, alpha = 0.8, inherit.aes = FALSE, max.overlaps = 100
+  ) +
+  facet_wrap(~major, ncol = 3, scales = "free") +
+  labs(
+    title = "MDS of Flow Cytometry for each major cell population",
+    y = "MDS 1",
+    x = "MDS 2",
+    color = "Cell type",
+    shape = "Major Cell type"
+  ) +
+  theme(legend.position = "none")
+
+
+p2_mds
+
+ggsave("img/mds_facet.jpg", plot = p2_mds, width = 10, height = 8)
+
+```
+
+The second technique we used was Multidimensional Scaling (MDS). While MDS is capable of capturing distances between data points, it proved inefficient for our large dataset. Running MDS on 100,000 samples was impractical, as it would require a 37.3 GB distance matrix. It also couldn't handle 50,000 samples (requiring 18.6 GB) or even 30,000 samples (6.7 GB). We ultimately ran it on 20,000 samples due to memory constraints.
+
+Despite the limitations, MDS, like PCA, performed well in separating the major cell types. However, it also struggled with separating the subtypes. MDS did slightly better than PCA in this regard, as it showed clearer separation of the mait subtypes and some separation of the tcrgd subtypes, although not as distinct. Additionally, there was a slight distinction between the three b cell subtypes.
+
+It's important to note that the improved separation in the MDS plot might be partly due to the fact that it was run on fewer observations (20,000), which could have made the relationships between subtypes more discernible. Additionally, MDS optimizes for preserving pairwise distances, which might contribute to better subtype separation in some cases. However, the method's large memory requirements make it less practical for datasets of this size.
+
+## UMAP
+
+### Perform dimension reduction
+
+```{r}
+library(uwot)
+
+# Apply UMAP instead of PCA
+start_time <- Sys.time()
+umap_res <- umap(mat_dat, 
+                 n_neighbors = 15,
+                 n_components = 2,
+                 min_dist = 2)
+end_time <- Sys.time()
+
+# Calculate the time it takes to run UMAP
+umap_tot_time <- as.numeric(end_time - start_time)
+
+# Store the UMAP dimensions
+umap_1 <- umap_res[, 1]
+umap_2 <- umap_res[, 2]
+
+# Create a tibble similar to how you did for PCA
+umap_tibble <- cat_dat %>%
+  mutate(umap1 = umap_1,
+         umap2 = umap_2,
+         umap_time = umap_tot_time)
+
+# Convert to tibble if needed
+umap_tibble <- as.tibble(umap_tibble)
+umap_tibble
+
+
+```
+
+### Plot both major and minor cell types and for each cell type
+
+```{r}
+p1_umap <- ggplot(umap_tibble, aes(x = umap1, y = umap2))+
+  theme_cowplot()+
+  background_grid(major = "xy")+
+  geom_point(aes(colour = major_minor, shape = major), 
+             size = 2.5, alpha = 0.8) +
+  scale_color_manual(values = col_lab_minor)+
+  scale_shape_manual(values = shape_lab_major)+
+  geom_text_repel(
+    data = umap_tibble %>% 
+      group_by(major_minor, major, minor) %>% 
+      summarise(umap1_mean = mean(umap1),
+                umap2_mean = mean(umap2),
+                .groups = "drop"),
+    aes(x = umap1_mean, y = umap2_mean, label = major_minor),
+    size = 2.5, alpha = 0.8, inherit.aes = F, max.overlaps = 100) +
+  theme(legend.position = "botttom") +
+  labs(
+    title = "Flow Cytometry Data visualized using
+    UMAP Technique",
+    x = "UMAP 1",
+    y = "UMAP 2",
+    color = "Cell type",
+    shape = "Major Cell Type") +
+  coord_equal()
+
+p1_umap
+
+ggsave("img/umap.jpg", plot = p1_umap, width = 10, height = 8)
+```
+
+```{r}
+# Facet for the different major cell types: "b"     "cd4"   "cd8"   "mait"  "nk"    "tcrgd"
+
+
+p2_umap <- ggplot(umap_tibble, aes(x=umap1, y = umap2))+
+  theme_cowplot()+
+  background_grid(major = "xy")+
+  geom_point(
+    aes(colour = major_minor, shape = major_minor),
+    size = 2.5, alpha = 0.8
+  )+
+  scale_color_manual(values = col_lab_minor)+
+  scale_shape_manual(values = shape_lab_minor)+  
+  geom_text_repel(
+    data = umap_tibble %>% 
+      group_by(major_minor, major) %>% 
+      summarise(umap1_mean = mean(umap1),
+                umap2_mean = mean(umap2),
+                .groups = "drop"),
+    aes(x = umap1_mean, y = umap2_mean, label = major_minor),
+    size = 2.5, alpha = 0.8, inherit.aes = FALSE, max.overlaps = 100)+
+  facet_wrap(~major, ncol = 3, scales = "free")+
+  labs(
+    title = "PCA of Flow Cytometry for each major cell population",
+    y = "UMAP 1",
+    x = "UMAP 2",
+    color = "Cell type",
+    shape = "Major Cell type"
+  )+
+  theme(legend.position = "none")
+
+p2_umap
+
+# Save the plot to the current working directory
+ggsave("img/umap_facet.jpg", plot = p2_umap, width = 10, height = 8)
+
+
+```
+
+The last technique we used was UMAP (Uniform Manifold Approximation and Projection), which works by preserving the local structure of high-dimensional data while creating a lower-dimensional projection.
+
+UMAP did an excellent job in separating the major cell types, with each type clearly distinct from the others. It also performed well in distinguishing the subtypes. The two mait subtypes (cd4+ and cd8+) were clearly separated, with minimal overlap. The three b cell subtypes were also well separated, with memory and plasma cells nearly aligned along the first UMAP component. Similarly, the nk subtypes were well distinguished, especially cd56dim, which was clearly separated from the other two subtypes along the second UMAP component.
+
+However, UMAP struggled with the tcrgd subtypes, which showed significant overlap, possibly due to a lack of distinct marker expression patterns within these subtypes. The separation of cd4 and cd8 cells was not as clear, likely due to their abundance and the larger number of subtypes (5 for cd4 and 4 for cd8). In the cd8 cell types, all the subtypes seemed to be perfectly aligned along the first UMAP component, suggesting that key distinctions between the subtypes might be captured in a different dimension than the fist two components.
+
+## Conclusion
+
+The dimensionality reduction techniques demonstrated strengths and weaknesses in visualizing the cell types and subtypes in the dataset:
+
+PCA: Strengths lie in its speed.. It performed well in separating major cell types but struggled with fine-grained subtype separation. Its linear nature limited its ability to capture more complex relationships.
+
+MDS: While effective at preserving pairwise distances and slightly better than PCA in distinguishing some subtypes (especially mait and b cells), MDS was impractical for large datasets due to its memory requirements. The improved separation in subtypes could also be influenced by the reduced sample size used.
+
+UMAP: UMAP excelled at separating both major cell types and subtypes, thanks to its ability to capture non-linear structures. It provided clear distinction for most subtypes, although it struggled with tcrgd subtypes. UMAP's effectiveness comes at the cost of longer runtime, but it offers the best overall performance for this dataset.
+
+Overall, UMAP proved to be the most effective, while PCA was the fastest, and MDS was hindered by scalability issues.

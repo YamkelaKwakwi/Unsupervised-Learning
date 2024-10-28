@@ -1,0 +1,25 @@
+"0","# Export libraries and read data"
+"0",""
+"0","library(ggplot2)"
+"2","Want to understand how all the pieces fit together? Read R for Data Science: https://r4ds.hadley.nz/
+"
+"0","library(tibble)"
+"0","library(knitr)"
+"0","library(dplyr)"
+"2","
+Attaching package: ‘dplyr’
+
+"
+"2","The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+"
+"2","The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+"
+"0","dat <- read.csv(""data/flow_cytometry_data.csv"")"
+"0","dat <- as.tibble(dat)"
+"0","dat"

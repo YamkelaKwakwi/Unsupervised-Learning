@@ -1,0 +1,2 @@
+"0",""
+"0","ggsave(""img/mds.jpg"", plot = p1_mds, width = 10, height = 8)"

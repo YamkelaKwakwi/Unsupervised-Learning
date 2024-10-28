@@ -1,0 +1,3 @@
+"0",""
+"0","ggsave(""img/pca_facet.jpg"", plot = p2_pca, width = 10, height = 8)"
+"0",""

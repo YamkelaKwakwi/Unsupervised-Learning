@@ -1,0 +1,6 @@
+"0","# Add the major_minor variable to the dat"
+"0","dat <- dat %>% "
+"0","  mutate(major_minor = paste(major,minor, sep = ""_""))"
+"0",""
+"0","# Subset the dat to 1k observations for test runs"
+"0","dat_subset <- dat %>% sample_n(10000)"

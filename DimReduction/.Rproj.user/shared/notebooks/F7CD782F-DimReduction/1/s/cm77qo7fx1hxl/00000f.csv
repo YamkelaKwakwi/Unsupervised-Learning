@@ -1,0 +1,6 @@
+"0","# Convert to matrix excluding 'major' and 'minor' columns"
+"0","mat_dat <- as.matrix(dat %>% select(-major, -minor, -major_minor))"
+"0",""
+"0","# Select the categorical data"
+"0","cat_dat <- dat %>% select(major_minor,major,minor)"
+"0",""
