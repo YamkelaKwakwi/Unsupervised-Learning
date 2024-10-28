@@ -1,0 +1,31 @@
+{
+    "id": "6AE0014F",
+    "path": "~/Personal/Projects/Recommender-system/Book_recommender.qmd",
+    "project_path": "Book_recommender.qmd",
+    "type": "quarto_markdown",
+    "hash": "3433037172",
+    "contents": "",
+    "dirty": false,
+    "created": 1730128698420.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "rmdVisualMode": "false",
+        "rmdVisualWrapConfigured": "true",
+        "source_window_id": "",
+        "Source": "Source",
+        "docOutlineVisible": "1",
+        "rmdVisualCollapsedChunks": "",
+        "rmdVisualModeLocation": "95:0",
+        "cursorPosition": "243,48",
+        "scrollLine": "227"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1730130017,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1730130017830,
+    "read_only": false,
+    "read_only_alternatives": []
+}
