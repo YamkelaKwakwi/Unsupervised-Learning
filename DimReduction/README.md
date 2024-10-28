@@ -1,6 +1,6 @@
 # Dimension Reduction on Flow Cytometry Data
 
-This project explores dimension reduction techniques on a flow cytometry dataset to improve the visualization and classification of cell types. The HTML file was generated from RMarkdown and includes various plots and analyses.
+This project explores dimension reduction techniques on a flow cytometry dataset to improve the visualization and classification of cell types. 
 
 ## Project Overview
 
@@ -11,17 +11,26 @@ The primary objective is to apply and evaluate different dimensionality reductio
 1. **Data Preparation**: Cleaning and preprocessing of flow cytometry data to prepare it for analysis.
 2. **Dimensionality Reduction Techniques**:
    - Principal Component Analysis (PCA)
-   - t-SNE
+   - Multidimensional Scaling (MDS)
    - UMAP
 3. **Evaluation**: Visualizations of cell type separations achieved by each method.
 
 ### Images and Plots
 
-Plots and visualizations are located in the `img/` folder, providing a visual representation of the data clustering and separation for different techniques.
+Below are some visualizations showcasing the results of the dimension reduction techniques:
+
+#### PCA Visualization
+![PCA](img/pca.jpg)
+
+#### MDS Visualization
+![MDS](img/mds.jpg)
+
+#### UMAP Visualization
+![UMAP](img/umap.jpg)
 
 ## Getting Started
 
-To view the HTML file, open `DimReduction.html` in a web browser. The file includes all analyses, explanations, and visualizations for the dimensionality reduction techniques applied.
+To view the full analysis, open `DimReduction.html` in a web browser. The file includes all explanations, code and visualizations for the dimensionality reduction techniques applied.
 
 ### Requirements
 
@@ -32,6 +41,5 @@ To replicate or extend the analysis, the following R libraries are recommended:
 ## Author
 
 - **Yamkela Kwakwi**
-
 
 
